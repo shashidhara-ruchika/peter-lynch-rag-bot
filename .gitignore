@@ -210,3 +210,5 @@ chromadb_persist/
 chroma_persist/
 *.pyc
 *.db
+
+.vscode
