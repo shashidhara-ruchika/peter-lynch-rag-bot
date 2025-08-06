@@ -32,16 +32,72 @@ def get_financial_df(stock_list):
     df = pd.DataFrame.from_dict(fin_data, orient='index').T
     return df
 
+# Full list of ratios including financialCurrency
+all_financial_ratios = [
+    "maxAge",
+    "currentPrice",
+    "targetHighPrice",
+    "targetLowPrice",
+    "targetMeanPrice",
+    "targetMedianPrice",
+    "recommendationMean",
+    "recommendationKey",
+    "numberOfAnalystOpinions",
+    "totalCash",
+    "totalCashPerShare",
+    "ebitda",
+    "totalDebt",
+    "quickRatio",
+    "currentRatio",
+    "totalRevenue",
+    "debtToEquity",
+    "revenuePerShare",
+    "returnOnAssets",
+    "returnOnEquity",
+    "grossProfits",
+    "freeCashflow",
+    "operatingCashflow",
+    "earningsGrowth",
+    "revenueGrowth",
+    "grossMargins",
+    "ebitdaMargins",
+    "operatingMargins",
+    "profitMargins",
+    "financialCurrency",
+]
+
 # Ratio explanations (extend as needed)
 ratio_descriptions = {
-    "trailingPE":       "Price-to-Earnings (P/E): Current share price divided by earnings per share.",
-    "forwardPE":        "Forward P/E: Share price divided by projected future earnings.",
-    "returnOnEquity":   "Return on Equity (ROE): Efficiency at generating profit from equity.",
-    "returnOnAssets":   "Return on Assets (ROA): Net income divided by total assets.",
-    "debtToEquity":     "Debt-to-Equity (D/E): Company leverage, higher means more debt vs. equity.",
-    "dividendYield":    "Dividend Yield: Annual dividend divided by share price.",
-    "currentRatio":     "Current Ratio: Current assets/current liabilities (liquidity measure).",
-    "quickRatio":       "Quick Ratio: Stricter liquidity ratio—(assets minus inventories)/liabilities.",
+    "maxAge": "Max age of the data point (days)",
+    "currentPrice": "Current market price",
+    "targetHighPrice": "Analyst target high price",
+    "targetLowPrice": "Analyst target low price",
+    "targetMeanPrice": "Analyst mean target price",
+    "targetMedianPrice": "Analyst median target price",
+    "recommendationMean": "Mean analyst recommendation",
+    "recommendationKey": "Key analyst recommendation",
+    "numberOfAnalystOpinions": "Number of analyst opinions",
+    "totalCash": "Total cash held by company",
+    "totalCashPerShare": "Total cash per share",
+    "ebitda": "Earnings before interest, taxes, depreciation, and amortization",
+    "totalDebt": "Total debt",
+    "quickRatio": "Quick ratio liquidity measure",
+    "currentRatio": "Current ratio liquidity measure",
+    "totalRevenue": "Total revenue",
+    "debtToEquity": "Debt to equity ratio",
+    "revenuePerShare": "Revenue per share",
+    "returnOnAssets": "Return on assets",
+    "returnOnEquity": "Return on equity",
+    "grossProfits": "Gross profits",
+    "freeCashflow": "Free cash flow",
+    "operatingCashflow": "Operating cash flow",
+    "earningsGrowth": "Earnings growth rate",
+    "revenueGrowth": "Revenue growth rate",
+    "grossMargins": "Gross margin percentage",
+    "ebitdaMargins": "EBITDA margin percentage",
+    "operatingMargins": "Operating margin percentage",
+    "profitMargins": "Profit margin percentage",
+    "financialCurrency": "Currency of financial values",
 }
 
 # --- 1. SIDEBAR: STOCK PORTFOLIO WITH SELECTBOX TO ADD ---
@@ -103,7 +159,7 @@ if set(user_stocks) != set(st.session_state.portfolio):
     st.session_state.portfolio = user_stocks
 
 # --- 2. MAIN TITLE & INSTRUCTIONS ---
-st.title("📈 Lynch InvestBot: Chat, Ratios & Market Clusters")
+st.title("📈 Your Investments: Chat, Ratios & Market Clusters")
 st.markdown(
     "Chat with Peter Lynch's investing philosophy, analyze Dow Jones or custom stock ratios, and discover value/quality clusters for long/short ideas."
 )
@@ -127,7 +183,7 @@ with st.form("lynch_chat_form"):
         st.warning("Please enter a question.")
 
 # --- 4. FINANCIAL RATIOS DASHBOARD ---
-st.header("2️⃣ Key Financial Ratios Dashboard")
+st.header("2️⃣ Financial Ratios Dashboard")
 
 fin_data_df = get_financial_df(st.session_state.portfolio)
 available_fin_ratios = [r for r in ratio_descriptions if r in fin_data_df.index]
@@ -135,22 +191,26 @@ available_fin_ratios = [r for r in ratio_descriptions if r in fin_data_df.index]
 chosen_ratios = st.multiselect(
     "Select Key Financial Ratios to display:",
     options=available_fin_ratios,
-    default=available_fin_ratios[:4],
-    help="Choose which ratios to view. Explanations below."
+    default=["debtToEquity", "currentRatio", "returnOnEquity", "profitMargins", "revenueGrowth", "freeCashflow"],
+    help="Choose which ratios to display"
 )
 
+with st.sidebar.expander("🔍 Explanations for all financial ratios (click to expand)"):
+    for ratio, desc in ratio_descriptions.items():
+        st.markdown(f"**{ratio}:** {desc}")
+
+
 if chosen_ratios:
-    st.dataframe(
-        fin_data_df.loc[chosen_ratios].T.style.format("{:.2f}"),
-        use_container_width=True,
-        hide_index=False
-    )
+    with st.container():
+        # st.markdown("### Financial Ratios Table (Scrollable)")
+        # Use style to fix height and make scroll vertical
+        styled_df = fin_data_df.loc[chosen_ratios].T.style.set_table_attributes(
+            'style="max-height:400px; overflow-y:auto; display:block;"'
+        )
+        st.dataframe(styled_df, use_container_width=True)
 else:
     st.warning("Select at least one financial ratio to display.")
 
-with st.expander("🔍 Explanations for all financial ratios (click to expand)"):
-    for ratio, desc in ratio_descriptions.items():
-        st.markdown(f"**{ratio}:** {desc}")
 
 # --- 5. K-MEANS CLUSTERING SECTION ---
 st.header("3️⃣ Value–Quality Stock Clustering & Recommendations")
