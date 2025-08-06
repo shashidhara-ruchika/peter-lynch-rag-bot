@@ -45,31 +45,60 @@ ratio_descriptions = {
 }
 
 # --- 1. SIDEBAR: STOCK PORTFOLIO WITH SELECTBOX TO ADD ---
+import streamlit as st
+from yahooquery import Ticker
+import yahoo_fin.stock_info as si
+
+# Initialize portfolio in session_state once
+if "portfolio" not in st.session_state:
+    st.session_state.portfolio = si.tickers_dow()
+
+if "stock_to_remove" not in st.session_state:
+    st.session_state.stock_to_remove = None
+
+def stock_exists(symbol: str) -> bool:
+    """Check if a given stock symbol exists by querying yahooquery."""
+    symbol = symbol.upper()
+    try:
+        t = Ticker(symbol)
+        info = t.quote_type
+        if symbol in info and info[symbol].get("quoteType"):
+            return True
+        else:
+            return False
+    except Exception:
+        return False
+
 st.sidebar.title("Stock Portfolio")
 
-if "portfolio" not in st.session_state:
-    st.session_state.portfolio = get_dow_symbols()
+# --- Add Stock Form ---
+with st.sidebar.form("add_stock_form", clear_on_submit=True):
+    new_symbol = st.text_input("Type any stock symbol to add (e.g., TSLA):", max_chars=10)
+    add_button = st.form_submit_button("Add Stock")
 
-dow_symbols = get_dow_symbols()
-# Stocks available to add = All Dow symbols minus already in portfolio
-available_to_add = sorted(list(set(dow_symbols) - set(st.session_state.portfolio)))
+    if add_button:
+        new_symbol = new_symbol.strip().upper()
+        if not new_symbol:
+            st.sidebar.warning("Please enter a stock symbol.")
+        elif new_symbol in st.session_state.portfolio:
+            st.sidebar.info(f"{new_symbol} is already in your portfolio.")
+        elif stock_exists(new_symbol):
+            st.session_state.portfolio.append(new_symbol)
+            st.sidebar.success(f"Added {new_symbol} to portfolio!")
+        else:
+            st.sidebar.error(f"Stock symbol '{new_symbol}' does not exist. Please check and try again.")
 
-# Stock selector dropdown to add (only one at a time)
-selected_to_add = st.sidebar.selectbox("Select a stock to add to your portfolio:", options=available_to_add)
+# --- Display Current Portfolio with "x" Buttons for Removal ---
+st.sidebar.write("### Current Portfolio (remove stocks by clicking 'x')")
 
-if st.sidebar.button("Add Stock"):
-    if selected_to_add not in st.session_state.portfolio:
-        st.session_state.portfolio.append(selected_to_add)
-        st.sidebar.success(f"Added {selected_to_add}!")
-    else:
-        st.sidebar.info("Stock already in portfolio.")
+user_stocks = st.sidebar.multiselect(
+    "Select stocks for your portfolio (remove by unselecting):",
+    options=st.session_state.portfolio,
+    default=st.session_state.portfolio,
+    help="Unselect stocks here to remove them from your portfolio."
+)
 
-# Multiselect to remove stocks from portfolio
-user_stocks = st.sidebar.multiselect("Select stocks for your portfolio (remove by unselecting):",
-                                     options=st.session_state.portfolio,
-                                     default=st.session_state.portfolio)
-
-# Update portfolio to match user's current selection in multiselect
+# Update portfolio if user unselects any stocks
 if set(user_stocks) != set(st.session_state.portfolio):
     st.session_state.portfolio = user_stocks
 
