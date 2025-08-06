@@ -19,7 +19,8 @@ import warnings
 warnings.filterwarnings("ignore", category=Warning)
 random.seed(42)
 
-# --- Caching for efficient re-use
+
+# --- Utilities ---
 @st.cache_data
 def get_dow_symbols():
     return si.tickers_dow()
@@ -31,21 +32,54 @@ def get_financial_df(stock_list):
     df = pd.DataFrame.from_dict(fin_data, orient='index').T
     return df
 
-# --- Sidebar: Stock Portfolio Management ---
-st.sidebar.title("Stock Portfolio")
-default_dow = get_dow_symbols()
-user_stocks = st.sidebar.multiselect("Select stocks for your portfolio", options=default_dow, default=default_dow)
-add_custom = st.sidebar.text_input("Add a custom stock symbol (e.g., TSLA):", "")
-if add_custom and add_custom.upper() not in user_stocks:
-    user_stocks.append(add_custom.upper())
+# Ratio explanations (extend as needed)
+ratio_descriptions = {
+    "trailingPE":       "Price-to-Earnings (P/E): Current share price divided by earnings per share.",
+    "forwardPE":        "Forward P/E: Share price divided by projected future earnings.",
+    "returnOnEquity":   "Return on Equity (ROE): Efficiency at generating profit from equity.",
+    "returnOnAssets":   "Return on Assets (ROA): Net income divided by total assets.",
+    "debtToEquity":     "Debt-to-Equity (D/E): Company leverage, higher means more debt vs. equity.",
+    "dividendYield":    "Dividend Yield: Annual dividend divided by share price.",
+    "currentRatio":     "Current Ratio: Current assets/current liabilities (liquidity measure).",
+    "quickRatio":       "Quick Ratio: Stricter liquidity ratio—(assets minus inventories)/liabilities.",
+}
 
-# --- Main Title ---
+# --- 1. SIDEBAR: STOCK PORTFOLIO WITH SELECTBOX TO ADD ---
+st.sidebar.title("Stock Portfolio")
+
+if "portfolio" not in st.session_state:
+    st.session_state.portfolio = get_dow_symbols()
+
+dow_symbols = get_dow_symbols()
+# Stocks available to add = All Dow symbols minus already in portfolio
+available_to_add = sorted(list(set(dow_symbols) - set(st.session_state.portfolio)))
+
+# Stock selector dropdown to add (only one at a time)
+selected_to_add = st.sidebar.selectbox("Select a stock to add to your portfolio:", options=available_to_add)
+
+if st.sidebar.button("Add Stock"):
+    if selected_to_add not in st.session_state.portfolio:
+        st.session_state.portfolio.append(selected_to_add)
+        st.sidebar.success(f"Added {selected_to_add}!")
+    else:
+        st.sidebar.info("Stock already in portfolio.")
+
+# Multiselect to remove stocks from portfolio
+user_stocks = st.sidebar.multiselect("Select stocks for your portfolio (remove by unselecting):",
+                                     options=st.session_state.portfolio,
+                                     default=st.session_state.portfolio)
+
+# Update portfolio to match user's current selection in multiselect
+if set(user_stocks) != set(st.session_state.portfolio):
+    st.session_state.portfolio = user_stocks
+
+# --- 2. MAIN TITLE & INSTRUCTIONS ---
 st.title("📈 Lynch InvestBot: Chat, Ratios & Market Clusters")
 st.markdown(
     "Chat with Peter Lynch's investing philosophy, analyze Dow Jones or custom stock ratios, and discover value/quality clusters for long/short ideas."
 )
 
-# --- 1. Peter Lynch Chatbot Section ---
+# --- 3. PETER LYNCH CHATBOT ---
 st.header("1️⃣ Ask 'Peter Lynch'")
 qa_data = load_qa()
 embedder, collection = init_embedding_store(qa_data)
@@ -63,45 +97,42 @@ with st.form("lynch_chat_form"):
     elif submitted and not user_question.strip():
         st.warning("Please enter a question.")
 
-# --- 2. Financial Ratios Dashboard ---
+# --- 4. FINANCIAL RATIOS DASHBOARD ---
 st.header("2️⃣ Key Financial Ratios Dashboard")
-fin_data_df = get_financial_df(user_stocks)
 
-# --- Ratio descriptions ---
-ratio_descriptions = {
-    "trailingPE":       "Price-to-Earnings Ratio — The current share price relative to its per-share earnings.",
-    "forwardPE":        "Forward P/E — Share price relative to predicted earnings (estimates).",
-    "returnOnEquity":   "Return on Equity (ROE) — Efficiency at generating profit from shareholders’ equity.",
-    "returnOnAssets":   "Return on Assets (ROA) — Profitability relative to all company assets.",
-    "debtToEquity":     "Debt-to-Equity — Company's leverage: total liabilities divided by equity.",
-    "dividendYield":    "Dividend Yield — Annual dividend as a % of stock price (shows income potential).",
-    "currentRatio":     "Current Ratio — Ability to pay short-term obligations: current assets/current liabilities.",
-    "quickRatio":       "Quick Ratio — Stricter liquidity: (current assets - inventories) / current liabilities.",
-}
+fin_data_df = get_financial_df(st.session_state.portfolio)
+available_fin_ratios = [r for r in ratio_descriptions if r in fin_data_df.index]
 
-with st.expander("What do these ratios mean? (click to expand)"):
+chosen_ratios = st.multiselect(
+    "Select Key Financial Ratios to display:",
+    options=available_fin_ratios,
+    default=available_fin_ratios[:4],
+    help="Choose which ratios to view. Explanations below."
+)
+
+if chosen_ratios:
+    st.dataframe(
+        fin_data_df.loc[chosen_ratios].T.style.format("{:.2f}"),
+        use_container_width=True,
+        hide_index=False
+    )
+else:
+    st.warning("Select at least one financial ratio to display.")
+
+with st.expander("🔍 Explanations for all financial ratios (click to expand)"):
     for ratio, desc in ratio_descriptions.items():
         st.markdown(f"**{ratio}:** {desc}")
 
-# Show only those ratios, handle missing gracefully
-show_ratios = [r for r in ratio_descriptions if r in fin_data_df.index]
-if show_ratios:
-    st.dataframe(fin_data_df.loc[show_ratios].T.style.format('{:.2f}'))
-else:
-    st.warning("No financial ratios found for current selection. Try different or fewer stocks.")
-
-# --- 3. K-Means Value-Quality Clustering and Recommendation ---
+# --- 5. K-MEANS CLUSTERING SECTION ---
 st.header("3️⃣ Value–Quality Stock Clustering & Recommendations")
+
 if len(fin_data_df.columns) < 4:
     st.info("Select at least 4 stocks for meaningful clusters.")
 else:
-    # Preprocess: ratios, feature selection, impute/fix DE where needed
     temp_df = fin_data_df.copy()
     if "debtToEquity" in temp_df.index:
         temp_df.loc["debtToEquity"] = 1 / temp_df.loc["debtToEquity"].replace(0, float("nan"))
-
     data_full = temp_df.T.fillna(0)
-    # Remove columns not for clustering (adapt to available cols):
     drop_cols = [c for c in [
         'maxAge','currentPrice','targetHighPrice', 'targetLowPrice', 'targetMeanPrice', 
         'targetMedianPrice', 'recommendationMean', 'recommendationKey', 
@@ -113,32 +144,45 @@ else:
     else:
         scaler = MinMaxScaler()
         X = scaler.fit_transform(data)
-        n_clusters = 4 if X.shape[0] >= 4 else X.shape[0]  # Avoid error if few stocks
+        n_clusters = 4 if X.shape[0] >= 4 else X.shape[0]
         model = KMeans(n_clusters=n_clusters, random_state=100)
         model.fit(X)
         yhat = model.predict(X)
         clusters = unique(yhat)
+        
+        # Hover data only: symbol, cluster num, value & quality rounded to 2 decimals
+        hover_data = {
+            "Stock": data.index,
+            "Cluster": yhat,
+            "Value": [round(v, 2) for v in X[:, 0]],
+            "Quality": [round(q, 2) for q in X[:, 1]],
+        }
 
-        # Interactive plot
         fig = px.scatter(
             x=X[:, 0], y=X[:, 1], color=[str(c) for c in yhat],
             hover_name=data.index,
-            hover_data={
-                "Stock": data.index,
-                "Value": X[:, 0],
-                "Quality": X[:, 1],
-                "Cluster": yhat,
-            },
+            hover_data=hover_data,
             title="Value vs. Quality (K-Means Clustering)"
         )
         fig.update_layout(xaxis_title="Value Score", yaxis_title="Quality Score", showlegend=True)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Show Long (cluster 3), Short (cluster 2) as in your logic
-        st.success("#### Long Recommendation List (Cluster 3)")
-        st.write(list(data.index[yhat == 3]) if 3 in clusters else "No stocks in this cluster.")
-        st.error("#### Short Recommendation List (Cluster 2)")
-        st.write(list(data.index[yhat == 2]) if 2 in clusters else "No stocks in this cluster.")
+        # Pretty display of stock symbols in bullet lists for Long (cluster 3) and Short (cluster 2)
+        def display_stock_list(cluster_num, cluster_name):
+            stocks = list(data.index[yhat == cluster_num])
+            st.write(f"**{cluster_name} ({len(stocks)} stocks):**")
+            if stocks:
+                for s in stocks:
+                    st.write(f"- {s}")
+            else:
+                st.write("_None._")
+
+        st.success("Long Recommendation List (Cluster 3):")
+        display_stock_list(3, "Long")
+
+        st.error("Short Recommendation List (Cluster 2):")
+        display_stock_list(2, "Short")
+
 
 # --- Footer ---
 st.caption("Built with Streamlit, yahooquery, yahoo_fin, ChromaDB, SentenceTransformer, FLAN-T5, and scikit-learn.")
