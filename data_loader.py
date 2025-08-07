@@ -23,18 +23,3 @@ def load_qa():
     
     logger.info(f"🔄 Converted {len(qa_data)} Q&A pairs to dictionary format")
     return qa_data
-
-@st.cache_data(show_spinner=True)
-def load_report_data():
-    logger.info("📈 Loading investment report data...")
-    # Replace with your actual report CSV or data source if needed
-    data = {
-        "Ticker": ["AAPL", "AMGN", "AMZN", "AXP", "BA"],
-        "Price": [214.10, 315.04, 194.95, 270.83, 172.83],
-        "Recommendation": ["Buy", "Buy", "Strong Buy", "Hold", "Buy"],
-        "EarningsGrowth": [0.10, 0.08, 0.15, 0.05, 0.07],
-        "PE_Ratio": [19, 25, 32, 16, 20],
-    }
-    df = pd.DataFrame(data)
-    logger.info(f"📊 Report data loaded with {len(df)} stocks")
-    return df

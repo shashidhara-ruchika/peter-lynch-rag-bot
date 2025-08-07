@@ -2,14 +2,14 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 import streamlit as st
 import logging
-from config import CHROMA_PERSIST_DIR
+from config import CHROMA_PERSIST_DIR, SENTENCE_EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
 
 @st.cache_resource(show_spinner=True)
 def init_embedding_store(qa_data):
     logger.info("🔧 Initializing SentenceTransformer model...")
-    embedder = SentenceTransformer("sentence-transformers/paraphrase-MiniLM-L6-v2")
+    embedder = SentenceTransformer(SENTENCE_EMBEDDING_MODEL)
     logger.info("✅ SentenceTransformer model loaded")
     
     logger.info(f"🗄️ Connecting to ChromaDB at {CHROMA_PERSIST_DIR}...")
